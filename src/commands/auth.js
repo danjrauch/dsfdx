@@ -13,14 +13,14 @@ class AuthCommand extends Command {
     let project_scratch_def = fs.readJSONSync(`${__dirname}/../../config/project-scratch-def.json`)
     project_scratch_def.orgName = flags.alias
     fs.writeJsonSync(`${__dirname}/../../config/project-scratch-def.json`, project_scratch_def, {spaces: 2})
-    if(flags.env == 'prod' || flags.env == 'p'){
+    if(flags.prod){
       if(flags.devhub)
         await execa.shell(`sfdx force:auth:web:login -a ${flags.alias} --setdefaultdevhubusername`)
       else
         await execa.shell(`sfdx force:auth:web:login -a ${flags.alias}`)
-    }else if(flags.env == 'test' || flags.env == 't'){
+    }else if(flags.test){
       await execa.shell(`sfdx force:auth:web:login -r https://test.salesforce.com -a ${flags.alias}`)
-    }else if(flags.env == 'dev' || flags.env == 'd'){
+    }else if(flags.scratch){
       const orgs = await execa.shell('sfdx force:org:list --json')
       const org_json = JSON.parse(orgs.stdout)
       const avail_org = org_json.result.scratchOrgs.map(e => e.alias).filter(a => a == flags.alias)
@@ -53,15 +53,17 @@ AuthCommand.aliases = ['a']
 AuthCommand.description = `authorize a new environment`
 
 AuthCommand.examples = [
-  '$ dsfdx auth -a some_name -e prod -devhub',
-  '$ dsfdx a -a sandbox_name -e test',
-  '$ dsfdx a -a test_scratch -e dev'
+  '$ dsfdx auth -a some_name -p --devhub',
+  '$ dsfdx a -a sandbox_name -t',
+  '$ dsfdx a -a test_scratch -d'
 ]
 
 AuthCommand.flags = {
   alias: flags.string({required: true, char: 'a'}),
-  env: flags.string({required: true, char: 'e'}),
-  devhub: flags.boolean()
+  scratch: flags.boolean({char: 's'}),
+  test: flags.boolean({char: 't'}),
+  prod: flags.boolean({char: 'p'}),
+  devhub: flags.boolean({dependsOn: ['prod']})
 }
 
 // AuthCommand.usage = 'mycommand --myflag'

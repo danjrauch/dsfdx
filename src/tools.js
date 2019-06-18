@@ -18,9 +18,10 @@ module.exports = {
       fs.writeJsonSync(`${__dirname}/../config/project-scratch-def.json`, 
       {
         "orgName": "",
-        "edition": "Developer",
+        "edition": "Enterprise",
         "features": [
-          "API"
+          "API",
+          "RecordTypes"
         ],
         "orgPreferences": {
           "enabled": [],

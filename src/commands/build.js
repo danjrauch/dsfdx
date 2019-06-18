@@ -15,15 +15,52 @@ class BuildCommand extends Command {
       process.chdir(flags.dir)
     if(!fs.pathExistsSync('./sfdx-project.json'))
       this.error('Not a sfdx project.')
-    if(flags.env == 'dev' || flags.env == 'd'){
+    if(flags.scratch){
       if(flags.new){
         cli.action.start('refreshing environment')
-        await execa.shell(`sfdx force:org:delete -p -u ${flags.alias} --json`)
+        let project_scratch_def = fs.readJSONSync(`${__dirname}/../../config/project-scratch-def.json`)
+        project_scratch_def.orgName = flags.alias
+        fs.writeJsonSync(`${__dirname}/../../config/project-scratch-def.json`, project_scratch_def, {spaces: 2})
+        const orgs = await execa.shell('sfdx force:org:list --json')
+        const org_json = JSON.parse(orgs.stdout)
+        const scratch_org = org_json.result.scratchOrgs.map(e => e.alias).filter(a => a == flags.alias)
+        if(scratch_org.length > 0)
+          await execa.shell(`sfdx force:org:delete -p -u ${flags.alias} --json`)
         if(config.dev_hub)
           await execa.shell(`sfdx force:org:create -f ${__dirname}/../../config/project-scratch-def.json -a ${flags.alias} -v ${config.dev_hub} --json`)
         else
           this.error('Please provide a value for dev_hub in config.json.')
         cli.action.stop('done')
+        const want_packages = await cli.confirm('Do you want to install packages from another environment? [yes/no]')
+        if(want_packages){
+          const org_name = await cli.prompt('What is the org name?')
+          try{
+            const output = await execa.shell(`sfdx force:package:installed:list -u ${org_name} --json`)
+            const res = JSON.parse(output.stdout)
+            if(res.status == 0){
+              for(const e of res.result){
+                const install = await cli.confirm(`Do you want to install ${chalk.red(e.SubscriberPackageName)}? [yes/no]`)
+                if(install){
+                  cli.action.start(`installing ${e.SubscriberPackageName} to ${flags.alias}`)
+                  const install_output = await execa.shell(`sfdx force:package:install -p ${e.SubscriberPackageVersionId} -u ${flags.alias} --json`)
+                  const install_json = JSON.parse(install_output.stdout)
+                  //TODO: Finish this
+                  while(true){
+                    await cli.wait(1000)
+                    const check_install_output = await execa.shell(`sfdx force:package:install:report -i ${install_json.result.Id} -u ${flags.alias} --json`)
+                    const check_install_json = JSON.parse(check_install_output.stdout)
+                    this.log(check_install_json)
+                  }
+                  cli.action.stop('done')
+                }
+              }
+            }else{
+              this.error(res.name, {exit: res.status})
+            }
+          }catch(error){
+            this.error(JSON.parse(error.stderr).message, {exit: error.code})
+          }
+        }
       }
       try{
         const output = await execa.shell(`sfdx force:source:push -u ${flags.alias} --json`)
@@ -40,7 +77,7 @@ class BuildCommand extends Command {
         JSON.parse(error.stderr).result.forEach(e => this.log(chalk.red('Error: ') + chalk.magenta(e.error)))
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).code})
       }
-    }else if(flags.env == 'test' || flags.env == 't'){
+    }else if(flags.test){
       cli.action.start('building source with mdapi')
       await execa.shell(`rm -rf mdapi_out`)
       await execa.shell(`mkdir mdapi_out`)
@@ -97,13 +134,16 @@ class BuildCommand extends Command {
         const output = await execa.shell(`sfdx force:mdapi:deploy -c -d mdapi_out/ -u ${flags.alias} -w 10 --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
-          // this.log(res.result.details.componentSuccesses)
           res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Checked: ') + e.fullName))
         }else{
           this.error(res.name, {exit: res.status})
         }
       }catch(error){
-        JSON.parse(error.stderr).result.details.componentFailures.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem)))
+        const errors = JSON.parse(error.stderr).result.details.componentFailures
+        if(Array.isArray(errors))
+          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + ' on line ' + e.lineNumber))
+        else
+          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + ' on line ' + errors.lineNumber)
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).status})
       }
 
@@ -111,13 +151,16 @@ class BuildCommand extends Command {
         const output = await execa.shell(`sfdx force:mdapi:deploy -d mdapi_out/ -u ${flags.alias} -w 10 --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
-          // this.log(res.result.details.componentSuccesses)
           res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Pushed: ') + e.fullName))
         }else{
           this.error(res.name, {exit: res.status})
         }
       }catch(error){
-        JSON.parse(error.stderr).result.details.componentFailures.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem)))
+        const errors = JSON.parse(error.stderr).result.details.componentFailures
+        if(Array.isArray(errors))
+          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + ' on line ' + e.lineNumber))
+        else
+          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + ' on line ' + errors.lineNumber)
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).status})
       }
     }else{
@@ -131,14 +174,17 @@ BuildCommand.aliases = ['b']
 BuildCommand.description = `build code to some environment`
 
 BuildCommand.examples = [
-  '$ dsfdx build -a some_name -e dev -d ../../folder/project -n'
+  '$ dsfdx build -a some_name -s -d ../../folder/project -n',
+  '$ dsfdx b -a some_name -t -d .'
 ]
 
 BuildCommand.flags = {
   alias: flags.string({required: true, char: 'a'}),
-  env: flags.string({required: true, char: 'e'}),
+  scratch: flags.boolean({char: 's'}),
+  test: flags.boolean({char: 't'}),
+  // prod: flags.boolean({char: 'p'}),
   dir: flags.string({char: 'd'}),
-  new: flags.boolean({char: 'n'})
+  new: flags.boolean({char: 'n', dependsOn: ['scratch']})
 }
 
 module.exports = BuildCommand
