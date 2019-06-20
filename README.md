@@ -56,7 +56,7 @@ ALIASES
 EXAMPLES
   $ dsfdx auth -a some_name -p --devhub
   $ dsfdx a -a sandbox_name -t
-  $ dsfdx a -a test_scratch -d
+  $ dsfdx a -a test_scratch -s
 ```
 
 _See code: [src/commands/auth.js](https://github.com/danjrauch/dsfdx/blob/v0.0.0/src/commands/auth.js)_
@@ -166,7 +166,7 @@ ALIASES
   $ dsfdx r
 
 EXAMPLE
-  $ dsfdx retrieve -a some_name -d ../../folder/project
+  $ dsfdx retrieve -a some_name -d ../../folder/project -t
 ```
 
 _See code: [src/commands/retrieve.js](https://github.com/danjrauch/dsfdx/blob/v0.0.0/src/commands/retrieve.js)_

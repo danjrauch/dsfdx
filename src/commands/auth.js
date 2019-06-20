@@ -55,7 +55,7 @@ AuthCommand.description = `authorize a new environment`
 AuthCommand.examples = [
   '$ dsfdx auth -a some_name -p --devhub',
   '$ dsfdx a -a sandbox_name -t',
-  '$ dsfdx a -a test_scratch -d'
+  '$ dsfdx a -a test_scratch -s'
 ]
 
 AuthCommand.flags = {

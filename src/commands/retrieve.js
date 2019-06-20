@@ -57,7 +57,7 @@ RetrieveCommand.aliases = ['r']
 RetrieveCommand.description = `retrieve code from some environment`
 
 RetrieveCommand.examples = [
-  '$ dsfdx retrieve -a some_name -d ../../folder/project'
+  '$ dsfdx retrieve -a some_name -d ../../folder/project -t'
 ]
 
 RetrieveCommand.flags = {
