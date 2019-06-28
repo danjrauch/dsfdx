@@ -141,9 +141,9 @@ class BuildCommand extends Command {
       }catch(error){
         const errors = JSON.parse(error.stderr).result.details.componentFailures
         if(Array.isArray(errors))
-          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + ' on line ' + e.lineNumber))
+          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + `${e.lineNumber ? ' on line ' + e.lineNumber : ''}`))
         else
-          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + ' on line ' + errors.lineNumber)
+          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + `${errors.lineNumber ? ' on line ' + errors.lineNumber : ''}`)
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).status})
       }
 
@@ -158,9 +158,9 @@ class BuildCommand extends Command {
       }catch(error){
         const errors = JSON.parse(error.stderr).result.details.componentFailures
         if(Array.isArray(errors))
-          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + ' on line ' + e.lineNumber))
+          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + `${errors.lineNumber ? ' on line ' + errors.lineNumber : ''}`))
         else
-          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + ' on line ' + errors.lineNumber)
+          this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + `${errors.lineNumber ? ' on line ' + errors.lineNumber : ''}`)
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).status})
       }
     }else{

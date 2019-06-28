@@ -9,6 +9,7 @@ module.exports = {
         "test_env": "https://test.salesforce.com",
         "prod_env": "https://login.salesforce.com",
         "dev_hub": "",
+        "api_version": "45.0",
         "code_directories": ["classes", "triggers", "components", "pages", "testSuites", "aura", "lwc"]
       }, {spaces: 2})
     }
