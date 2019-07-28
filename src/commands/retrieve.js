@@ -17,13 +17,13 @@ class RetrieveCommand extends Command {
       this.error('Not a sfdx project.')
     if(flags.scratch){
       try{
-        const output = await execa.shell(`sfdx force:source:push -u ${flags.alias} --json`)
+        const output = await execa.shell(`sfdx force:source:pull -u ${flags.alias} --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
-          if(res.result.pushedSource.length == 0)
+          if(res.result.pulledSource.length == 0)
             this.log(chalk.red('No source pull needed.'))
           else
-            res.result.pushedSource.forEach(e => this.log(chalk.blue('Pulled: ') + chalk.red(e.fullName)))
+            res.result.pulledSource.forEach(e => this.log(chalk.blue('Pulled: ') + chalk.red(e.fullName)))
         }else{
           this.error(res.name, {exit: res.status})
         }
@@ -31,51 +31,55 @@ class RetrieveCommand extends Command {
         JSON.parse(error.stderr).result.forEach(e => this.log(chalk.red('Error: ') + chalk.magenta(e.error)))
         this.error(JSON.parse(error.stderr).message, {exit: error.code})
       }
-    }else if(flags.test){
+    }else if(flags.test || flags.prod){
       fs.ensureFileSync(`./mdapi_pkg/package.xml`)
 
-      let data = { 'Package':
+      const current_package = await cli.confirm(`Use current package.xml contents? [yes/no]`)
+
+      if(!current_package){
+        let data = { 'Package':
                     { '$': { xmlns: 'http://soap.sforce.com/2006/04/metadata' },
                       'types': [],
                       'version': [ config.api_version ],
                       'fullName': [ 'MetadatePackage' ] } }
 
-      cli.action.start('describing metadata')
-      const mdapi_output = await execa.shell(`sfdx force:mdapi:describemetadata -u ${flags.alias} --json`)
-      cli.action.stop('done')
-      const mdapi_describe = JSON.parse(mdapi_output.stdout).result
-      // const folder_names = fs.readdirSync('./mdapi_pkg').filter(file => file != 'package.xml')
+        cli.action.start('describing metadata')
+        const mdapi_output = await execa.shell(`sfdx force:mdapi:describemetadata -u ${flags.alias} --json`)
+        cli.action.stop('done')
+        const mdapi_describe = JSON.parse(mdapi_output.stdout).result
+        // const folder_names = fs.readdirSync('./mdapi_pkg').filter(file => file != 'package.xml')
 
-      const code_only = await cli.confirm(`Pull only code components? [yes/no]`)
+        const code_only = await cli.confirm(`Pull only code components? [yes/no]`)
 
-      if(code_only){
-        for(const describe of mdapi_describe.metadataObjects){
-          if(config.code_directories.includes(describe.directoryName)){
-            data.Package.types.push({'name': [ describe.xmlName ], 'members': '*'})
-            if(describe.childXmlNames){
-              describe.childXmlNames.forEach(child => {
-                data.Package.types.push({'name': [ child ], 'members': '*'})
-              })
+        if(code_only){
+          for(const describe of mdapi_describe.metadataObjects){
+            if(config.code_directories.includes(describe.directoryName)){
+              data.Package.types.push({'name': [ describe.xmlName ], 'members': '*'})
+              if(describe.childXmlNames){
+                describe.childXmlNames.forEach(child => {
+                  data.Package.types.push({'name': [ child ], 'members': '*'})
+                })
+              }
+            }
+          }
+        }else{
+          for(const describe of mdapi_describe.metadataObjects){
+            const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
+            if(include){
+              data.Package.types.push({'name': [ describe.xmlName ], 'members': '*'})
+              if(describe.childXmlNames){
+                describe.childXmlNames.forEach(child => {
+                  data.Package.types.push({'name': [ child ], 'members': '*'})
+                })
+              }
             }
           }
         }
-      }else{
-        for(const describe of mdapi_describe.metadataObjects){
-          const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
-          if(include){
-            data.Package.types.push({'name': [ describe.xmlName ], 'members': '*'})
-            if(describe.childXmlNames){
-              describe.childXmlNames.forEach(child => {
-                data.Package.types.push({'name': [ child ], 'members': '*'})
-              })
-            }
-          }
-        }
+
+        let builder = new xml2js.Builder()
+        let xml = builder.buildObject(data)
+        await fs.writeFile('./mdapi_pkg/package.xml', xml)
       }
-
-      let builder = new xml2js.Builder()
-      let xml = builder.buildObject(data)
-      await fs.writeFile('./mdapi_pkg/package.xml', xml)
 
       await cli.anykey()
 
@@ -105,7 +109,7 @@ RetrieveCommand.flags = {
   alias: flags.string({required: true, char: 'a'}),
   scratch: flags.boolean({char: 's'}),
   test: flags.boolean({char: 't'}),
-  // prod: flags.boolean({char: 'p'}),
+  prod: flags.boolean({char: 'p'}),
   dir: flags.string({char: 'd'})
 }
 
