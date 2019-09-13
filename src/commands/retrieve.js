@@ -21,7 +21,7 @@ class RetrieveCommand extends Command {
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
           if(res.result.pulledSource.length == 0)
-            this.log(chalk.red('No source pull needed.'))
+            this.log('=== ' + chalk.cyan('No source pull needed'))
           else
             res.result.pulledSource.forEach(e => this.log(chalk.blue('Pulled: ') + chalk.red(e.fullName)))
         }else{

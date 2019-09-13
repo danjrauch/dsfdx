@@ -72,6 +72,7 @@ USAGE
 OPTIONS
   -a, --alias=alias  (required)
   -d, --dir=dir
+  -f, --force
   -n, --new
   -s, --scratch
   -t, --test
@@ -159,6 +160,7 @@ USAGE
 OPTIONS
   -a, --alias=alias  (required)
   -d, --dir=dir
+  -p, --prod
   -s, --scratch
   -t, --test
 

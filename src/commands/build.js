@@ -44,7 +44,7 @@ class BuildCommand extends Command {
                   cli.action.start(`installing ${e.SubscriberPackageName} to ${flags.alias}`)
                   const install_output = await execa.shell(`sfdx force:package:install -p ${e.SubscriberPackageVersionId} -u ${flags.alias} --json`)
                   const install_json = JSON.parse(install_output.stdout)
-                  //TODO: Finish this
+                  //TODO Finish this
                   while(true){
                     await cli.wait(1000)
                     const check_install_output = await execa.shell(`sfdx force:package:install:report -i ${install_json.result.Id} -u ${flags.alias} --json`)
@@ -63,11 +63,11 @@ class BuildCommand extends Command {
         }
       }
       try{
-        const output = await execa.shell(`sfdx force:source:push -u ${flags.alias} --json`)
+        const output = await execa.shell(`sfdx force:source:push -u ${flags.alias} ${flags.force ? '-f' : ''} --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
           if(res.result.pushedSource.length == 0)
-            this.log(chalk.red('No source push needed.'))
+            this.log('=== ' + chalk.cyan('No source push needed'))
           else
             res.result.pushedSource.forEach(e => this.log(chalk.green('Pushed: ') + e.fullName))
         }else{
@@ -109,16 +109,20 @@ class BuildCommand extends Command {
           }
         }
       }else{
-        for(const describe of mdapi_describe.metadataObjects){
-          if(folder_names.includes(describe.directoryName)){
-            const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
-            if(!include){
-              fs.removeSync(`./mdapi_out/${describe.directoryName}`)
-              data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`), 1)
-              describe.childXmlNames.forEach(child => {
-                if(data.Package.types.map(e => e.name[0]).includes(child))
-                  data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${child}`), 1)
-              })
+        const parse = await cli.confirm(`Parse deployment components? [yes/no]`)
+        if(parse){
+          for(const describe of mdapi_describe.metadataObjects){
+            if(folder_names.includes(describe.directoryName)){
+              const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
+              if(!include){
+                fs.removeSync(`./mdapi_out/${describe.directoryName}`)
+                data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`), 1)
+                if(describe.childXmlNames)
+                  describe.childXmlNames.forEach(child => {
+                    if(data.Package.types.map(e => e.name[0]).includes(child))
+                      data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${child}`), 1)
+                  })
+              }
             }
           }
         }
@@ -140,8 +144,9 @@ class BuildCommand extends Command {
         }
       }catch(error){
         const errors = JSON.parse(error.stderr).result.details.componentFailures
+        // console.log(errors[0])
         if(Array.isArray(errors))
-          errors.forEach(e => this.log(chalk.red(`Error for ${e.fullName}: `) + chalk.magenta(e.problem) + `${e.lineNumber ? ' on line ' + e.lineNumber : ''}`))
+          errors.forEach(e => this.log(chalk.red(`Error for ${e.fileName}: `) + chalk.magenta(e.problem) + `${e.lineNumber ? ' on line ' + e.lineNumber : ''}`))
         else
           this.log(chalk.red(`Error for ${errors.fullName}: `) + chalk.magenta(errors.problem) + `${errors.lineNumber ? ' on line ' + errors.lineNumber : ''}`)
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).status})
@@ -183,6 +188,7 @@ BuildCommand.flags = {
   scratch: flags.boolean({char: 's'}),
   test: flags.boolean({char: 't'}),
   // prod: flags.boolean({char: 'p'}),
+  force: flags.boolean({char: 'f'}),
   dir: flags.string({char: 'd'}),
   new: flags.boolean({char: 'n', dependsOn: ['scratch']})
 }
