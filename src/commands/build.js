@@ -93,9 +93,9 @@ class BuildCommand extends Command {
       const mdapi_describe = JSON.parse(mdapi_output.stdout).result
       const folder_names = fs.readdirSync('./mdapi_out').filter(file => file != 'package.xml')
 
-      const code_only = await cli.confirm(`Push only code components? [yes/no]`)
+      // const code_only = await cli.confirm(`Push only code components? [yes/no]`)
 
-      if(code_only){
+      if(flags.code){
         for(const describe of mdapi_describe.metadataObjects){
           if(folder_names.includes(describe.directoryName) && !config.code_directories.includes(describe.directoryName)){
             fs.removeSync(`./mdapi_out/${describe.directoryName}`)
@@ -189,6 +189,7 @@ BuildCommand.flags = {
   test: flags.boolean({char: 't'}),
   // prod: flags.boolean({char: 'p'}),
   force: flags.boolean({char: 'f'}),
+  code: flags.boolean({char: 'c'}),
   dir: flags.string({char: 'd'}),
   new: flags.boolean({char: 'n', dependsOn: ['scratch']})
 }
