@@ -71,9 +71,12 @@ USAGE
 
 OPTIONS
   -a, --alias=alias  (required)
+  -c, --code
   -d, --dir=dir
   -f, --force
+  -l, --last
   -n, --new
+  -p, --parse
   -s, --scratch
   -t, --test
 

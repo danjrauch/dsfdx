@@ -78,22 +78,21 @@ class BuildCommand extends Command {
         this.error(JSON.parse(error.stderr).message, {exit: JSON.parse(error.stderr).code})
       }
     }else if(flags.test){
-      cli.action.start('building source with mdapi')
+      cli.action.start('Building and describing metadata')
+      // cli.action.start('building source with mdapi')
       await execa.shell(`rm -rf mdapi_out`)
       await execa.shell(`mkdir mdapi_out`)
       await execa.shell(`sfdx force:source:convert -d mdapi_out/ -n MetadatePackage`)
-      cli.action.stop('done')
+      // cli.action.stop('done')
 
       let data = await fs.readFile('./mdapi_out/package.xml', 'utf-8')
       xml2js.parseString(data, function(err, result) { data = result })
 
-      cli.action.start('describing metadata')
+      // cli.action.start('describing metadata')
       const mdapi_output = await execa.shell(`sfdx force:mdapi:describemetadata -u ${flags.alias} --json`)
       cli.action.stop('done')
       const mdapi_describe = JSON.parse(mdapi_output.stdout).result
       const folder_names = fs.readdirSync('./mdapi_out').filter(file => file != 'package.xml')
-
-      // const code_only = await cli.confirm(`Push only code components? [yes/no]`)
 
       if(flags.code){
         for(const describe of mdapi_describe.metadataObjects){
@@ -108,20 +107,87 @@ class BuildCommand extends Command {
             }
           }
         }
+      }else if(flags.parse){
+        for(const describe of mdapi_describe.metadataObjects){
+          if(folder_names.includes(describe.directoryName)){
+            const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
+            if(!include){
+              fs.removeSync(`./mdapi_out/${describe.directoryName}`)
+              data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`), 1)
+              if(describe.childXmlNames){
+                describe.childXmlNames.forEach(child => {
+                  if(data.Package.types.map(e => e.name[0]).includes(child))
+                    data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${child}`), 1)
+                })
+              }
+            }
+          }
+        }
       }else{
-        const parse = await cli.confirm(`Parse deployment components? [yes/no]`)
-        if(parse){
-          for(const describe of mdapi_describe.metadataObjects){
-            if(folder_names.includes(describe.directoryName)){
-              const include = await cli.confirm(`Include ${chalk.red(describe.directoryName)}? [yes/no]`)
-              if(!include){
-                fs.removeSync(`./mdapi_out/${describe.directoryName}`)
-                data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`), 1)
-                if(describe.childXmlNames)
-                  describe.childXmlNames.forEach(child => {
-                    if(data.Package.types.map(e => e.name[0]).includes(child))
-                      data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${child}`), 1)
-                  })
+        let com_idx = 0
+        this.log(`<folder_name> <file_name> => input a component`)
+        this.log(`f                         => finishes input`)
+        let components = {}
+        while(true){
+          let raw_com = ''
+          if(flags.last){
+            const last_coms = fs.readFileSync(`${__dirname}/../../data/last_com.txt`, 'utf8').split('\n');
+            if(com_idx < last_coms.length)
+              raw_com = last_coms[com_idx];
+            else
+              break
+          }else{
+            raw_com = await cli.prompt(`${com_idx}`)
+            if(raw_com == 'f')
+              break
+          }
+          const com = raw_com.split(' ')
+          if(!folder_names.includes(com[0]))
+            this.error(`${com[0]} wasn\'t found`)
+          const file_names = fs.readdirSync(`./mdapi_out/${com[0]}`)
+          const describe = mdapi_describe.metadataObjects.filter(e => e.directoryName == com[0])[0]
+          const exp_name = 'suffix' in describe ? com[1]+'.'+describe.suffix : com[1]
+          if(!file_names.includes(exp_name))
+            this.error(`${exp_name} wasn\'t found in ${com[0]}`)
+          if(com[0] in components)
+            components[com[0]].push({base_name: com[1], exp_name: exp_name})
+          else
+            components[com[0]] = [{base_name: com[1], exp_name: exp_name}]
+          if(describe.metaFile)
+            components[com[0]][components[com[0]].length-1].meta_name = `${exp_name}-meta.xml`
+          com_idx += 1
+        }
+        for(const describe of mdapi_describe.metadataObjects){
+          if(folder_names.includes(describe.directoryName)){
+            if(!Object.keys(components).includes(describe.directoryName)){
+              fs.removeSync(`./mdapi_out/${describe.directoryName}`)
+              data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`), 1)
+              if(describe.childXmlNames){
+                describe.childXmlNames.forEach(child => {
+                  if(data.Package.types.map(e => e.name[0]).includes(child))
+                    data.Package.types.splice(data.Package.types.map(e => e.name[0]).indexOf(`${child}`), 1)
+                })
+              }
+            }else{
+              let possible_coms = []
+              const idx = data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`)
+              data.Package.types[idx].members.forEach(base_name => {
+                let possible_com = {}
+                possible_com.base_name = base_name
+                possible_com.exp_name = 'suffix' in describe ? base_name+'.'+describe.suffix : base_name
+                if(describe.metaFile)
+                  possible_com.meta_name = `${possible_com.exp_name}-meta.xml`
+                possible_coms.push(possible_com)
+              })
+              const del_coms = possible_coms.filter(e => !components[describe.directoryName].map(e => e.base_name)
+                                                                                            .includes(e.base_name))
+              for(const com of del_coms){
+                fs.removeSync(`./mdapi_out/${describe.directoryName}/${com.exp_name}`)
+                if(describe.metaFile)
+                  fs.removeSync(`./mdapi_out/${describe.directoryName}/${com.meta_name}`)
+                const idx = data.Package.types.map(e => e.name[0]).indexOf(`${describe.xmlName}`)
+                const file_idx = data.Package.types[idx].members.indexOf(com.base_name)
+                data.Package.types[idx].members.splice(file_idx, 1)
               }
             }
           }
@@ -134,17 +200,28 @@ class BuildCommand extends Command {
 
       await cli.anykey()
 
+      let last_coms_string = ''
+      for(const type of data.Package.types){
+        for(const member of type.members){
+          last_coms_string += `${type.name[0]} ${member}\n`
+        }
+      }
+      fs.ensureFileSync(`${__dirname}/../../data/last_com.txt`)
+      fs.writeFileSync(`${__dirname}/../../data/last_com.txt`, last_coms_string)
+
       try{
         const output = await execa.shell(`sfdx force:mdapi:deploy -c -d mdapi_out/ -u ${flags.alias} -w 10 --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
-          res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Checked: ') + e.fullName))
+          if(Array.isArray(res.result.details.componentSuccesses))
+            res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Checked: ') + e.fullName))
+          else
+            this.log(chalk.green('Checked: ') + res.result.details.componentSuccesses.fullName)
         }else{
           this.error(res.name, {exit: res.status})
         }
       }catch(error){
         const errors = JSON.parse(error.stderr).result.details.componentFailures
-        // console.log(errors[0])
         if(Array.isArray(errors))
           errors.forEach(e => this.log(chalk.red(`Error for ${e.fileName}: `) + chalk.magenta(e.problem) + `${e.lineNumber ? ' on line ' + e.lineNumber : ''}`))
         else
@@ -156,7 +233,10 @@ class BuildCommand extends Command {
         const output = await execa.shell(`sfdx force:mdapi:deploy -d mdapi_out/ -u ${flags.alias} -w 10 --json`)
         const res = JSON.parse(output.stdout)
         if(res.status == 0){
-          res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Pushed: ') + e.fullName))
+          if(Array.isArray(res.result.details.componentSuccesses))
+            res.result.details.componentSuccesses.forEach(e => this.log(chalk.green('Pushed: ') + e.fullName))
+          else
+            this.log(chalk.green('Pushed: ') + res.result.details.componentSuccesses.fullName)
         }else{
           this.error(res.name, {exit: res.status})
         }
@@ -190,6 +270,8 @@ BuildCommand.flags = {
   // prod: flags.boolean({char: 'p'}),
   force: flags.boolean({char: 'f'}),
   code: flags.boolean({char: 'c'}),
+  parse: flags.boolean({char: 'p'}),
+  last: flags.boolean({char: 'l'}),
   dir: flags.string({char: 'd'}),
   new: flags.boolean({char: 'n', dependsOn: ['scratch']})
 }

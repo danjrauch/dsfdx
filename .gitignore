@@ -8,3 +8,4 @@ node_modules
 .DS_Store
 /config/config.json
 /config/project-scratch-def.json
+/data
